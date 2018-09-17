@@ -7,7 +7,9 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
+    "os"
+    "net"
+    "strconv"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -24,6 +26,8 @@ type Block struct {
 }
 
 var Blockchain []Block
+
+var bcServer chan []Block
 
 func calculateHash(block Block) string {
 	record := string(block.Index) + block.Timestamp + string(block.data) + block.PrevHash
@@ -145,18 +149,37 @@ func respondWithJSON(w http.ResponseWriter, r *http.Request, code int, payload i
 	w.Write(response)
 }
 
+func handleConn(conn net.Conn) {
+	defer conn.Close()
+}
+
 func main() {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	go func() {
-		t := time.Now()
-		genesisBlock := Block{0, t.String(), "first", "", ""}
-		spew.Dump(genesisBlock)
-		Blockchain = append(Blockchain, genesisBlock)
-	}()
-	log.Fatal(run())
+	bcServer = make(chan []Block)
 
+	// create genesis block
+	t := time.Now()
+	genesisBlock := Block{0, t.String(), "genesis", "", ""}
+	spew.Dump(genesisBlock)
+    Blockchain = append(Blockchain, genesisBlock)
+
+    // start TCP and serve TCP server
+	server, err := net.Listen("tcp", ":"+os.Getenv("ADDR"))
+	if err != nil {
+		log.Fatal(err)
+	}
+    defer server.Close()
+
+    // listen and accept connections, handling appropriately
+    for {
+		conn, err := server.Accept()
+		if err != nil {
+			log.Fatal(err)
+		}
+		go handleConn(conn)
+    }
 }
